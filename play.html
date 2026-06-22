@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Little Delivery — Play</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root {
+    --cream: #FDF6F0; --coral: #FF8C7A; --coral-deep: #E8674F;
+    --sage: #9CAF88; --navy: #2D3142; --gold: #F0C674; --pink: #FF9EC7; --blue: #6FB7E8;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; background: var(--cream);
+    color: var(--navy); font-family: 'Nunito', sans-serif; overflow: hidden;
+    touch-action: manipulation;
+  }
+  #app {
+    width: 100vw; height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px; text-align: center;
+  }
+  h1, .display { font-family: 'Baloo 2', sans-serif; }
+  .eyebrow {
+    font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
+    font-size: 13px; color: var(--coral-deep); margin-bottom: 6px;
+  }
+  .title { font-size: clamp(22px, 7vw, 32px); font-weight: 700; margin: 0 0 28px 0; }
+
+  input#name-input {
+    font-family: 'Nunito', sans-serif; font-size: 20px; font-weight: 700;
+    padding: 16px 20px; border-radius: 16px; border: 3px solid var(--sage);
+    width: 80%; max-width: 320px; text-align: center; outline: none; margin-bottom: 18px;
+  }
+  .big-btn {
+    font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: clamp(28px, 9vw, 44px);
+    color: white; border: none; border-radius: 28px; width: 80vw; max-width: 360px;
+    height: 30vh; max-height: 220px; cursor: pointer; box-shadow: 0 10px 24px rgba(0,0,0,0.15);
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    transition: transform 0.06s;
+  }
+  .big-btn:active { transform: scale(0.95); }
+  .btn-coral { background: var(--coral); }
+  .btn-sage { background: var(--sage); }
+  .btn-pink { background: var(--pink); }
+  .btn-blue { background: var(--blue); }
+  .btn-gold { background: var(--gold); color: var(--navy); }
+
+  .vote-grid-mobile { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 90vw; max-width: 420px; }
+  .vote-btn-mobile {
+    font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 18px;
+    background: white; border: 3px solid var(--sage); border-radius: 20px;
+    padding: 22px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    cursor: pointer; transition: transform 0.06s, border-color 0.15s;
+  }
+  .vote-btn-mobile:active { transform: scale(0.95); }
+  .vote-btn-mobile.selected { border-color: var(--coral-deep); background: #FFF3F0; }
+  .vote-emoji-mobile { font-size: 40px; }
+
+  .status-pill {
+    margin-top: 18px; font-weight: 800; font-size: 16px; padding: 8px 18px;
+    border-radius: 999px; background: white; border: 2px solid var(--sage);
+  }
+  .waiting-text { font-size: 18px; font-weight: 700; opacity: 0.7; margin-top: 14px; }
+
+  #reveal-screen {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    flex-direction: column; z-index: 50;
+  }
+  #reveal-screen.boy { background: var(--blue); }
+  #reveal-screen.girl { background: var(--pink); }
+  #reveal-screen h1 { font-size: clamp(38px, 12vw, 60px); color: white; text-align: center; margin: 0 16px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="reveal-screen"><h1 id="reveal-text"></h1></div>
+
+<script>
+const socket = io();
+let myName = '';
+let hasJoined = false;
+let currentPhase = 'lobby';
+
+const app = document.getElementById('app');
+
+function renderJoin() {
+  app.innerHTML = `
+    <div class="eyebrow">welcome</div>
+    <h1 class="title">what's your name?</h1>
+    <input id="name-input" placeholder="Type your name" maxlength="20" autocomplete="off" />
+    <button class="big-btn btn-coral" style="height:auto; padding:18px 0; font-size:22px;" id="join-btn">join the game</button>
+  `;
+  document.getElementById('join-btn').onclick = doJoin;
+  document.getElementById('name-input').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+}
+
+function doJoin() {
+  const val = document.getElementById('name-input').value.trim();
+  if (!val) return;
+  myName = val;
+  socket.emit('join', myName);
+}
+
+function renderWaitingLobby() {
+  app.innerHTML = `
+    <div class="eyebrow">you're in!</div>
+    <h1 class="title">connected ✅</h1>
+    <div class="waiting-text">hang tight, ${escapeHtml(myName)} — the game starts soon</div>
+  `;
+}
+
+function renderRound1() {
+  app.innerHTML = `
+    <div class="eyebrow">round 1 · diaper dash</div>
+    <button class="big-btn btn-coral" id="tap-btn">TAP! 🛒</button>
+  `;
+  document.getElementById('tap-btn').onclick = () => socket.emit('tap_cart');
+}
+
+function renderRound2() {
+  const opts = [
+    { id: 'bottle', emoji: '🍼', label: 'Bottle' },
+    { id: 'bib', emoji: '👶', label: 'Bib' },
+    { id: 'sock', emoji: '🧦', label: 'Sock' },
+    { id: 'rattle', emoji: '🎶', label: 'Rattle' }
+  ];
+  app.innerHTML = `
+    <div class="eyebrow">round 2 · pick a card</div>
+    <h1 class="title" style="font-size:20px;">tap your favorite!</h1>
+    <div class="vote-grid-mobile" id="vote-grid"></div>
+  `;
+  const grid = document.getElementById('vote-grid');
+  opts.forEach(o => {
+    const btn = document.createElement('div');
+    btn.className = 'vote-btn-mobile';
+    btn.innerHTML = `<div class="vote-emoji-mobile">${o.emoji}</div>${o.label}`;
+    btn.onclick = () => {
+      document.querySelectorAll('.vote-btn-mobile').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      socket.emit('vote_card', o.id);
+    };
+    grid.appendChild(btn);
+  });
+}
+
+function renderRound3(data) {
+  const isMyTurn = data.currentPlayer === myName;
+  if (!isMyTurn) {
+    app.innerHTML = `
+      <div class="eyebrow">round 3 · build the nursery</div>
+      <h1 class="title">waiting for your turn…</h1>
+      <div class="waiting-text">${data.currentPlayer ? escapeHtml(data.currentPlayer) + ' is placing now' : 'almost done!'}</div>
+    `;
+    return;
+  }
+  app.innerHTML = `
+    <div class="eyebrow">round 3 · your turn!</div>
+    <h1 class="title" style="font-size:20px;">tap anywhere below to place it</h1>
+    <div id="placement-zone" style="width:80vw; max-width:340px; height:38vh; background:white; border:3px dashed var(--sage); border-radius:20px; position:relative; cursor:pointer;">
+      <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:48px;">📍</div>
+    </div>
+  `;
+  document.getElementById('placement-zone').onclick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    socket.emit('place_item', { x, y });
+  };
+}
+
+function renderRound4() {
+  app.innerHTML = `
+    <div class="eyebrow">round 4 · tug of war</div>
+    <h1 class="title">guess: pink or blue?</h1>
+    <div style="display:flex; gap:16px;">
+      <button class="big-btn btn-pink" style="width:38vw; height:22vh; font-size:24px;" id="pink-btn">PINK</button>
+      <button class="big-btn btn-blue" style="width:38vw; height:22vh; font-size:24px;" id="blue-btn">BLUE</button>
+    </div>
+    <div class="waiting-text" id="tug-status"></div>
+  `;
+  document.getElementById('pink-btn').onclick = () => castTug('pink');
+  document.getElementById('blue-btn').onclick = () => castTug('blue');
+}
+function castTug(color) {
+  socket.emit('vote_tug', color);
+  document.getElementById('tug-status').textContent = "vote locked in!";
+}
+
+function renderRound5() {
+  app.innerHTML = `
+    <div class="eyebrow">round 5 · lullaby mash</div>
+    <h1 class="title" style="font-size:22px;">tap with the beat on the big screen!</h1>
+    <button class="big-btn btn-gold" id="beat-btn">🎵</button>
+  `;
+  document.getElementById('beat-btn').onclick = () => socket.emit('beat_tap');
+}
+
+function renderFinale() {
+  app.innerHTML = `
+    <div class="eyebrow">the finale</div>
+    <h1 class="title">everyone push!</h1>
+    <button class="big-btn btn-coral" id="push-btn">PUSH! 🎁</button>
+  `;
+  document.getElementById('push-btn').onclick = () => socket.emit('mash');
+}
+
+function renderReveal(color) {
+  const screen = document.getElementById('reveal-screen');
+  screen.className = color === 'blue' ? 'boy' : 'girl';
+  document.getElementById('reveal-text').textContent = color === 'blue' ? "IT'S A BOY! 💙" : "IT'S A GIRL! 💗";
+  screen.style.display = 'flex';
+}
+
+function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+socket.on('joined', (data) => {
+  hasJoined = true;
+  currentPhase = data.phase;
+  if (currentPhase === 'lobby') renderWaitingLobby();
+  else dispatchPhase(currentPhase, {});
+});
+
+socket.on('phase_change', (data) => { currentPhase = data.phase; });
+
+socket.on('round_state', (data) => {
+  if (!hasJoined) return;
+  currentPhase = data.phase;
+  dispatchPhase(data.phase, data);
+});
+
+socket.on('reveal', (data) => { renderReveal(data.color); });
+
+function dispatchPhase(phase, data) {
+  switch (phase) {
+    case 'lobby': renderWaitingLobby(); break;
+    case 'round1_diaperdash': renderRound1(); break;
+    case 'round2_pickacard': renderRound2(); break;
+    case 'round3_nursery': renderRound3(data); break;
+    case 'round4_tugofwar': renderRound4(); break;
+    case 'round5_lullaby': renderRound5(); break;
+    case 'finale': renderFinale(); break;
+  }
+}
+
+renderJoin();
+</script>
+</body>
+</html>

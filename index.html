@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Little Delivery — Host Screen</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<style>
+  :root {
+    --cream: #FDF6F0;
+    --coral: #FF8C7A;
+    --coral-deep: #E8674F;
+    --sage: #9CAF88;
+    --navy: #2D3142;
+    --gold: #F0C674;
+    --pink: #FF9EC7;
+    --blue: #6FB7E8;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: var(--cream);
+    color: var(--navy);
+    font-family: 'Nunito', sans-serif;
+    overflow: hidden;
+  }
+  #app { width: 100vw; height: 100vh; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  h1, h2, .display { font-family: 'Baloo 2', sans-serif; }
+  .eyebrow {
+    font-family: 'Nunito', sans-serif; font-weight: 800; letter-spacing: 0.18em;
+    text-transform: uppercase; font-size: clamp(14px, 1.4vw, 20px); color: var(--coral-deep);
+    margin-bottom: 8px;
+  }
+  .stage-title {
+    font-size: clamp(36px, 5vw, 64px); font-weight: 700; margin: 0 0 24px 0; text-align: center;
+  }
+  .stork {
+    position: absolute; top: 28px; right: 40px; width: 64px; height: 64px; opacity: 0.85;
+  }
+  .control-corner {
+    position: absolute; bottom: 20px; right: 20px; opacity: 0.35; transition: opacity 0.2s;
+  }
+  .control-corner:hover { opacity: 1; }
+  .control-corner button {
+    font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 13px;
+    background: var(--navy); color: var(--cream); border: none; border-radius: 10px;
+    padding: 8px 14px; cursor: pointer;
+  }
+
+  /* LOBBY */
+  #qr-box { background: white; padding: 18px; border-radius: 20px; box-shadow: 0 10px 30px rgba(45,49,66,0.12); }
+  .url-pill {
+    margin-top: 18px; font-weight: 700; font-size: clamp(20px, 2.4vw, 30px);
+    background: var(--navy); color: var(--cream); padding: 10px 28px; border-radius: 999px;
+  }
+  #player-grid {
+    display: flex; gap: 14px; margin-top: 36px; flex-wrap: wrap; justify-content: center; max-width: 80vw;
+  }
+  .player-chip {
+    background: white; border: 3px solid var(--sage); border-radius: 16px; padding: 10px 18px;
+    font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px;
+  }
+  .player-chip.waiting { border-color: #ddd; opacity: 0.5; }
+  .start-btn {
+    margin-top: 36px; font-family: 'Baloo 2', sans-serif; font-size: 24px; font-weight: 700;
+    background: var(--coral); color: white; border: none; border-radius: 999px;
+    padding: 16px 48px; cursor: pointer; box-shadow: 0 8px 20px rgba(255,140,122,0.4);
+  }
+
+  /* ROUND 1: cart race */
+  .track { width: 80vw; margin: 14px 0; }
+  .lane { display: flex; align-items: center; gap: 16px; margin: 10px 0; }
+  .lane-name { width: 140px; font-weight: 700; text-align: right; font-size: 16px; }
+  .lane-bar { flex: 1; height: 28px; background: #fff; border-radius: 14px; border: 2px solid var(--sage); position: relative; overflow: hidden; }
+  .lane-fill { height: 100%; background: var(--coral); border-radius: 14px; transition: width 0.15s ease-out; }
+  .lane-cart { position: absolute; top: -4px; font-size: 28px; transition: left 0.15s ease-out; }
+
+  /* ROUND 2 & 5: vote bars */
+  .vote-grid { display: flex; gap: 36px; margin-top: 20px; }
+  .vote-card { display: flex; flex-direction: column; align-items: center; }
+  .vote-emoji { font-size: 64px; }
+  .vote-bar-track { width: 80px; height: 200px; background: white; border-radius: 16px; border: 2px solid var(--sage); display: flex; flex-direction: column-reverse; overflow: hidden; margin-top: 14px; }
+  .vote-bar-fill { width: 100%; background: var(--gold); transition: height 0.3s ease-out; }
+  .vote-count { margin-top: 10px; font-weight: 800; font-size: 22px; }
+
+  /* ROUND 3: nursery */
+  .nursery-room {
+    width: 70vw; height: 50vh; background: white; border: 4px dashed var(--sage); border-radius: 24px;
+    position: relative; margin-top: 10px;
+  }
+  .nursery-item { position: absolute; font-size: 48px; transform: translate(-50%, -50%); }
+  .turn-banner {
+    font-size: clamp(22px, 2.6vw, 32px); font-weight: 700; margin-top: 18px; color: var(--coral-deep);
+  }
+
+  /* ROUND 4: tug of war */
+  .rope-wrap { width: 70vw; margin-top: 40px; position: relative; }
+  .rope-track { height: 16px; background: white; border-radius: 8px; border: 2px solid var(--navy); position: relative; }
+  .rope-marker {
+    position: absolute; top: -22px; width: 60px; height: 60px; transform: translateX(-50%);
+    font-size: 44px; transition: left 0.3s ease-out;
+  }
+  .rope-labels { display: flex; justify-content: space-between; margin-top: 16px; font-weight: 800; font-size: 28px; }
+  .rope-labels .pink-label { color: var(--pink); }
+  .rope-labels .blue-label { color: var(--blue); }
+
+  /* ROUND 5: lullaby */
+  .beat-row { display: flex; gap: 24px; margin-top: 30px; }
+  .beat-box {
+    width: 80px; height: 80px; border-radius: 20px; background: white; border: 3px solid var(--sage);
+    transition: background 0.15s, transform 0.15s;
+  }
+  .beat-box.lit { background: var(--gold); transform: scale(1.12); }
+
+  /* FINALE */
+  .delivery-wrap { display: flex; flex-direction: column; align-items: center; }
+  .bundle { font-size: clamp(80px, 12vw, 160px); transition: transform 0.1s; }
+  .progress-track { width: 60vw; height: 36px; background: white; border-radius: 18px; border: 3px solid var(--navy); overflow: hidden; margin-top: 24px; }
+  .progress-fill { height: 100%; background: var(--gold); transition: width 0.2s ease-out; }
+
+  /* REVEAL */
+  #reveal-screen {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    flex-direction: column; z-index: 50;
+  }
+  #reveal-screen.boy { background: var(--blue); }
+  #reveal-screen.girl { background: var(--pink); }
+  #reveal-screen h1 { font-size: clamp(60px, 10vw, 140px); color: white; text-shadow: 0 6px 20px rgba(0,0,0,0.15); margin: 0; }
+  #reveal-screen .sub { font-size: clamp(24px, 3vw, 40px); color: white; opacity: 0.9; margin-top: 10px; font-weight: 700; }
+  canvas#confetti { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="reveal-screen">
+  <h1 id="reveal-text"></h1>
+  <div class="sub">welcome to the world, little one 💙</div>
+</div>
+<canvas id="confetti"></canvas>
+<div class="control-corner"><button id="ctrl-btn">advance ▸</button></div>
+
+<script>
+const socket = io();
+const app = document.getElementById('app');
+const ctrlBtn = document.getElementById('ctrl-btn');
+let currentPhase = 'lobby';
+let lobbyData = { players: [], canStart: false };
+
+ctrlBtn.onclick = () => {
+  if (currentPhase === 'lobby') socket.emit('host_start_anyway');
+  else socket.emit('host_advance');
+};
+
+function renderStork() {
+  return `<svg class="stork" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M44 14c0-4-3-7-7-7s-6 3-6 6c-8 1-14 8-14 17 0 3 1 5 2 7l-9 4 2 4 9-3c2 3 5 5 9 6v8h5v-8c7-1 12-7 12-15 0-2 0-4-1-6 3-1 5-3 5-6 0-3-2-5-5-6z" fill="#2D3142" opacity="0.7"/>
+    <circle cx="38" cy="11" r="2" fill="#FDF6F0"/>
+  </svg>`;
+}
+
+function renderLobby() {
+  app.innerHTML = `
+    ${renderStork()}
+    <div class="eyebrow">a little delivery is on its way</div>
+    <h1 class="stage-title">scan to join the game</h1>
+    <div id="qr-box"></div>
+    <div class="url-pill" id="join-url">loading...</div>
+    <div id="player-grid"></div>
+    ${lobbyData.canStart ? '<button class="start-btn" onclick="socket.emit(\\'host_start_anyway\\')">start anyway →</button>' : ''}
+  `;
+  const url = window.location.origin + '/play';
+  document.getElementById('join-url').textContent = url.replace('https://','').replace('http://','');
+  const qr = qrcode(4, 'M');
+  qr.addData(url);
+  qr.make();
+  document.getElementById('qr-box').innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2 });
+  renderPlayerGrid();
+}
+
+function renderPlayerGrid() {
+  const grid = document.getElementById('player-grid');
+  if (!grid) return;
+  grid.innerHTML = lobbyData.players.map(p =>
+    `<div class="player-chip ${p.connected ? '' : 'waiting'}">${p.connected ? '✅' : '⏳'} ${escapeHtml(p.name)}</div>`
+  ).join('') || '<div class="player-chip waiting">waiting for players…</div>';
+}
+
+function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderRound1(data) {
+  app.innerHTML = `
+    ${renderStork()}
+    <div class="eyebrow">round 1</div>
+    <h1 class="stage-title">diaper dash 🏁</h1>
+    <div class="track">
+      ${data.carts.map(c => `
+        <div class="lane">
+          <div class="lane-name">${escapeHtml(c.name)}</div>
+          <div class="lane-bar">
+            <div class="lane-fill" style="width:${c.progress}%"></div>
+            <div class="lane-cart" style="left:calc(${c.progress}% - 14px)">🛒</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderRound2(data) {
+  const emojis = { bottle: '🍼', bib: '👶', sock: '🧦', rattle: '🎶' };
+  const maxVotes = Math.max(1, ...data.icons.map(i => data.tallies[i] || 0));
+  app.innerHTML = `
+    ${renderStork()}
+    <div class="eyebrow">round 2</div>
+    <h1 class="stage-title">pick a card 🃏</h1>
+    <div class="vote-grid">
+      ${data.icons.map(icon => {
+        const count = data.tallies[icon] || 0;
+        const pct = Math.min(100, (count / maxVotes) * 100);
+        return `<div class="vote-card">
+          <div class="vote-emoji">${emojis[icon] || '❓'}</div>
+          <div class="vote-bar-track"><div class="vote-bar-fill" style="height:${pct}%"></div></div>
+          <div class="vote-count">${count}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function renderRound5(data) {
+  app.innerHTML = `
+    ${renderStork()}
+    <div class="eyebrow">round 5</div>
+    <h1 class="stage-title">lullaby mash 🎵</h1>
+    <div class="beat-row" id="beat-row">
+      <div class="beat-box" data-i="0"></div>
+      <div class="beat-box" data-i="1"></div>
+      <div class="beat-box" data-i="2"></div>
+      <div class="beat-box" data-i="3"></div>
+    </div>
+    <div class="turn-banner">tap your phone in time with the lights!</div>
+  `;
+  startBeatLoop();
+}
+
+let beatInterval = null;
+function startBeatLoop() {
+  if (beatInterval) clearInterval(beatInterval);
+  let i = 0;
+  beatInterval = setInterval(() => {
+    document.querySelectorAll('.beat-box').forEach(b => b.classList.remove('lit'));
+    const box = document.querySelector('.beat-box[data-i="' + (i % 4) + '"]');
+    if (box) box.classList.add('lit');
+    i++;
+  }, 500);
+}
+function stopBeatLoop() { if (beatInterval) clearInterval(beatInterval); beatInterval = null; }
+
+function renderRound3(data) {
+  const emojis = { crib:'🛏️', mobile:'🎠', rocking_chair:'🪑', lamp:'💡', rug:'🟫', bookshelf:'📚', teddy_bear:'🧸', window_curtain:'🪟', changing_table:'🗄️' };
+  app.innerHTML = `
+    ${renderStork()}
+    <div class="eyebrow">round 3</div>
+    <h1 class="stage-title">build the nursery 🏠</h1>
+    <div class="nursery-room" id="room">
+      ${data.placements.map(pl => `<div class="nursery-item" style="left:${pl.spot.x}%; top:${pl.spot.y}%">${emojis[pl.item]||'❓'}</div>`).join('')}
+    </div>
+    <div class="turn-banner">${data.currentPlayer ? `now placing: ${escapeHtml(data.currentPlayer)} ${emojis[data.currentItem]||''}` : 'all done!'}</div>
+  `;
+}
+
+function renderRound4(data) {
+  const total = (data.votes.pink || 0) + (data.votes.blue || 0);
+  const pinkPct = total === 0 ? 50 : (data.votes.pink / total) * 100;
+  app.innerHTML = `
+    ${renderStork()}
+    <div class="eyebrow">round 4</div>
+    <h1 class="stage-title">tug of war: pink vs blue 🎀</h1>
+    <div class="rope-wrap">
+      <div class="rope-track">
+        <div class="rope-marker" style="left:${pinkPct}%">🪢</div>
+      </div>
+      <div class="rope-labels"><span class="pink-label">PINK ${data.votes.pink||0}</span><span class="blue-label">BLUE ${data.votes.blue||0}</span></div>
+    </div>
+  `;
+}
+
+function renderFinale(data) {
+  const pct = data.target ? Math.min(100, (data.progress / data.target) * 100) : 0;
+  app.innerHTML = `
+    ${renderStork()}
+    <div class="eyebrow">the finale</div>
+    <h1 class="stage-title">the big delivery 🚚</h1>
+    <div class="delivery-wrap">
+      <div class="bundle" style="transform:scale(${1 + pct/300})">🎁</div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>
+  `;
+}
+
+function renderReveal(color) {
+  stopBeatLoop();
+  const screen = document.getElementById('reveal-screen');
+  screen.className = color === 'blue' ? 'boy' : 'girl';
+  document.getElementById('reveal-text').textContent = color === 'blue' ? "IT'S A BOY!" : "IT'S A GIRL!";
+  document.querySelector('.sub').innerHTML = `welcome to the world, little one ${color === 'blue' ? '💙' : '💗'}`;
+  screen.style.display = 'flex';
+  launchConfetti(color);
+}
+
+socket.on('lobby_update', (data) => {
+  lobbyData = data;
+  if (currentPhase === 'lobby') { renderLobby(); }
+});
+
+socket.on('phase_change', (data) => {
+  currentPhase = data.phase;
+  if (data.phase !== 'round5_lullaby') stopBeatLoop();
+});
+
+socket.on('round_state', (data) => {
+  currentPhase = data.phase;
+  switch (data.phase) {
+    case 'lobby': renderLobby(); break;
+    case 'round1_diaperdash': renderRound1(data); break;
+    case 'round2_pickacard': renderRound2(data); break;
+    case 'round3_nursery': renderRound3(data); break;
+    case 'round4_tugofwar': renderRound4(data); break;
+    case 'round5_lullaby': renderRound5(data); break;
+    case 'finale': renderFinale(data); break;
+  }
+});
+
+socket.on('reveal', (data) => { renderReveal(data.color); });
+
+// --- confetti ---
+function launchConfetti(color) {
+  const canvas = document.getElementById('confetti');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  const colors = color === 'blue' ? ['#6FB7E8','#FDF6F0','#F0C674'] : ['#FF9EC7','#FDF6F0','#F0C674'];
+  let particles = Array.from({length: 220}, () => ({
+    x: Math.random() * canvas.width, y: -20 - Math.random() * canvas.height,
+    r: 4 + Math.random() * 6, c: colors[Math.floor(Math.random()*colors.length)],
+    vy: 2 + Math.random() * 3, vx: -1.5 + Math.random() * 3, rot: Math.random()*360
+  }));
+  function frame() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    particles.forEach(p => {
+      p.y += p.vy; p.x += p.vx; p.rot += 4;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot*Math.PI/180);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r*1.6);
+      ctx.restore();
+    });
+    particles = particles.filter(p => p.y < canvas.height + 30);
+    if (particles.length > 0) requestAnimationFrame(frame);
+  }
+  frame();
+}
+
+renderLobby();
+</script>
+</body>
+</html>
